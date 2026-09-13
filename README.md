@@ -64,9 +64,11 @@ to `daemon.log`; the remaining kmod hooks are unaffected.
 When `globalConfig.useNoMountForFileHiding` is `true`, the daemon uses the
 installed NoMount module instead of SUSFS. It invokes
 `/data/adb/modules/nomount/bin/nm rule add --whiteout <path>` for each active
-VPN interface path and removes only rules it created when switching back to
-SUSFS. NoMount must be installed and active; otherwise the daemon continues
-without filesystem path hiding and logs the unavailable binary.
+VPN interface path during every interface-list update. Repeating `add` updates
+NoMount's virtual-path binding, including after an interface is recreated;
+rules for interfaces that have disappeared are intentionally left in place.
+NoMount must be installed and active; otherwise the daemon continues without
+filesystem path hiding and logs the unavailable binary.
 
 ## Applying kpatch
 

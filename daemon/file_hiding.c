@@ -2,11 +2,10 @@
 
 static void susfs_log_error(const char *format, ...);
 
-/* A VPN interface can disappear and be recreated under the same name, so keep a
- * small userspace identity cache and register each new object once. */
+/* A VPN interface can disappear and be recreated under the same name, so SUSFS
+ * keeps a small userspace identity cache and registers each new object once. */
 #define SUSFS_MAX_PATHS (MAX_ACTIVE_VPNS * 8)
 #define SUSFS_RETRY_LOG_MS (60ULL * 1000ULL)
-#define NOMOUNT_MAX_PATHS (MAX_ACTIVE_VPNS * 8)
 
 struct susfs_registered_path {
   char path[PATH_MAX];
@@ -30,12 +29,6 @@ void file_hiding_set_config_path(const char *config_path) {
   susfs_config_path = config_path;
 }
 
-struct nomount_registered_path {
-  char path[PATH_MAX];
-  bool valid;
-};
-
-static struct nomount_registered_path nomount_registered[NOMOUNT_MAX_PATHS];
 static const char *const nomount_tool_candidates[] = {
     "/data/adb/modules/nomount/bin/nm",
 };
@@ -107,7 +100,7 @@ static const char *nomount_find_tool(void) {
   return NULL;
 }
 
-static int nomount_run_rule(const char *action, const char *path) {
+static int nomount_run_rule(const char *path) {
   const char *tool = nomount_find_tool();
   int status;
   pid_t pid;
@@ -122,10 +115,7 @@ static int nomount_run_rule(const char *action, const char *path) {
   if (pid < 0)
     return -errno;
   if (pid == 0) {
-    if (!strcmp(action, "add"))
-      execl(tool, tool, "rule", "add", "--whiteout", path, (char *)NULL);
-    else
-      execl(tool, tool, "rule", "del", path, (char *)NULL);
+    execl(tool, tool, "rule", "add", "--whiteout", path, (char *)NULL);
     _exit(127);
   }
 
@@ -147,51 +137,6 @@ static int nomount_run_rule(const char *action, const char *path) {
     usleep(10000);
   }
   return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -EIO;
-}
-
-static struct nomount_registered_path *
-nomount_find_registered_path(const char *path) {
-  size_t i;
-
-  for (i = 0; i < NOMOUNT_MAX_PATHS; i++)
-    if (nomount_registered[i].valid &&
-        !strcmp(nomount_registered[i].path, path))
-      return &nomount_registered[i];
-  return NULL;
-}
-
-static void nomount_register_path(const char *path) {
-  struct nomount_registered_path *registered;
-  size_t i;
-
-  if (!path || !path[0])
-    return;
-  registered = nomount_find_registered_path(path);
-  if (registered)
-    return;
-  if (nomount_run_rule("add", path))
-    return;
-  for (i = 0; i < NOMOUNT_MAX_PATHS; i++) {
-    if (!nomount_registered[i].valid) {
-      nomount_registered[i].valid = true;
-      strncpy(nomount_registered[i].path, path, PATH_MAX - 1);
-      nomount_registered[i].path[PATH_MAX - 1] = '\0';
-      return;
-    }
-  }
-  susfs_log_error("NoMount registration cache is full; path %s was not cached",
-                  path);
-}
-
-static void nomount_unregister_paths(void) {
-  size_t i;
-
-  for (i = 0; i < NOMOUNT_MAX_PATHS; i++) {
-    if (!nomount_registered[i].valid)
-      continue;
-    nomount_run_rule("del", nomount_registered[i].path);
-    nomount_registered[i].valid = false;
-  }
 }
 
 static const char *susfs_find_tool(void) {
@@ -373,10 +318,10 @@ static void nomount_sync_interface(const char *ifname) {
   if (!ifname || !ifname[0])
     return;
   snprintf(path, sizeof(path), "/sys/class/net/%s", ifname);
-  nomount_register_path(path);
+  nomount_run_rule(path);
   for (i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
     snprintf(path, sizeof(path), suffixes[i], ifname);
-    nomount_register_path(path);
+    nomount_run_rule(path);
   }
 }
 
@@ -391,6 +336,5 @@ void file_hiding_sync_interfaces(const struct vpnhide_vpn_ifindexes *vpns) {
       nomount_sync_interface(vpns->vpns[i].name);
     return;
   }
-  nomount_unregister_paths();
   susfs_sync_interfaces(vpns);
 }
