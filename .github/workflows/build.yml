@@ -123,7 +123,8 @@ jobs:
       - name: Build kernel module
         run: |
           cd kmod
-          python3 build.py --kmi ${{ matrix.kmi }} --inside-container --skip-bridge
+          python3 build.py --kmi ${{ matrix.kmi }} --inside-container \
+            --skip-userspace-build --skip-bridge
 
       - name: Upload module zip as artifact
         uses: actions/upload-artifact@v4
