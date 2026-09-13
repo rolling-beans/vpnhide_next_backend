@@ -406,7 +406,8 @@ def run_native_mode(args: argparse.Namespace, kmod_dir: Path) -> int:
         rc = native_build_one(kmod_dir, kmi, kdir, clang_dir, args.out)
         if rc:
             return rc
-    build_bridge(kmod_dir.parent, kmod_dir)
+    if not args.skip_bridge:
+        build_bridge(kmod_dir.parent, kmod_dir)
     return 0
 
 
@@ -458,6 +459,7 @@ def container_build_one(
         "--skip-userspace-build",
         "--kmi",
         kmi,
+        "--skip-bridge",
     ]
     print(f"[{kmi}] {' '.join(cmd)}", flush=True)
     subprocess.run(cmd, check=True)
@@ -483,6 +485,9 @@ def run_container_mode(args: argparse.Namespace, repo_root: Path) -> int:
     print(f"Using {'podman' if is_podman else 'docker'} at {runtime}")
     for kmi in kmis:
         container_build_one(runtime, is_podman, repo_root, kmi)
+
+    if not args.skip_bridge:
+        build_bridge(repo_root, repo_root / "kmod")
 
     print()
     print("Built artifacts (at repo root):")
@@ -559,13 +564,35 @@ def main() -> int:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--skip-bridge",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--bridge-only",
+        action="store_true",
+        help="Package only vpnhide-bridge.zip (no kernel-module build).",
+    )
     args = parser.parse_args()
 
     if args.all and args.kmi:
         parser.error("--all and --kmi are mutually exclusive")
+    if args.bridge_only and (args.all or args.kmi or args.kdir or args.clang_dir or args.out):
+        parser.error("--bridge-only cannot be combined with kmod build options")
 
     kmod_dir = Path(__file__).resolve().parent
     repo_root = kmod_dir.parent
+
+    if args.bridge_only:
+        if not args.skip_userspace_build:
+            build_ctl_host(repo_root, kmod_dir)
+        else:
+            for binary in (kmod_dir / "vpnhide-ctl-host", kmod_dir / "vpnhide-daemon-host"):
+                if not binary.is_file():
+                    raise RuntimeError(f"prepared userspace binary missing: {binary}")
+        build_bridge(repo_root, kmod_dir)
+        return 0
 
     # Native conditions: explicit flag, explicit kernel source, or we're
     # already in a DDK image.

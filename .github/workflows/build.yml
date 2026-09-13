@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/build.yml'
+      - 'kmod/**'
+      - 'kpatch/**'
+      - 'scripts/build_lib.py'
   workflow_dispatch:
 
 permissions:
@@ -38,10 +44,14 @@ jobs:
         run: |
           NDK_CLANG="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang"
           NDK_STRIP="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
-          cd kmod
-          "$NDK_CLANG" -O2 -Wall -static vpnhide_ctl.c parson.c -o vpnhide-ctl-host
-          "$NDK_CLANG" -O2 -Wall -static vpnhide_daemon.c -o vpnhide-daemon-host
-          "$NDK_STRIP" vpnhide-ctl-host vpnhide-daemon-host
+          "$NDK_CLANG" -O2 -Wall -static \
+            kmod/vpnhide_ctl.c kmod/vpnhide_policy.c kmod/parson.c \
+            -o kmod/vpnhide-ctl-host
+          "$NDK_CLANG" -O2 -Wall -static \
+            daemon/main.c daemon/config_watch.c daemon/file_hiding.c \
+            daemon/network.c daemon/stats.c daemon/owned_ports.c \
+            -o kmod/vpnhide-daemon-host
+          "$NDK_STRIP" kmod/vpnhide-ctl-host kmod/vpnhide-daemon-host
 
       - name: Upload host binaries as artifact
         uses: actions/upload-artifact@v4
@@ -50,6 +60,34 @@ jobs:
           path: |
             kmod/vpnhide-ctl-host
             kmod/vpnhide-daemon-host
+          retention-days: 30
+          if-no-files-found: error
+
+  build-bridge:
+    name: Build bridge module
+    needs: build-host
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download host binaries (ctl, daemon)
+        uses: actions/download-artifact@v4
+        with:
+          name: vpnhide-host-binaries
+          path: kmod
+
+      - name: Package bridge module
+        run: |
+          chmod +x kmod/vpnhide-ctl-host kmod/vpnhide-daemon-host
+          python3 kmod/build.py --bridge-only --skip-userspace-build
+
+      - name: Upload bridge zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpnhide-bridge
+          path: vpnhide-bridge.zip
           retention-days: 30
           if-no-files-found: error
 
@@ -85,7 +123,7 @@ jobs:
       - name: Build kernel module
         run: |
           cd kmod
-          python3 build.py --kmi ${{ matrix.kmi }} --inside-container
+          python3 build.py --kmi ${{ matrix.kmi }} --inside-container --skip-bridge
 
       - name: Upload module zip as artifact
         uses: actions/upload-artifact@v4
@@ -223,7 +261,7 @@ jobs:
     # A release is immutable between tags. Branch pushes still run the build
     # and runtime checks above, but must never overwrite a published release.
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-host, build-kmod, kmod-qemu, kpatch-qemu]
+    needs: [build-host, build-bridge, build-kmod, kmod-qemu, kpatch-qemu]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -247,6 +285,7 @@ jobs:
           echo "📌 Tag push detected: $TAG"
           gh release create "$TAG" \
             'dist/vpnhide-kmod-*/vpnhide-kmod-*.zip' \
+            'dist/vpnhide-bridge/vpnhide-bridge.zip' \
             --repo "$REPO" \
             --draft=false \
             --generate-notes

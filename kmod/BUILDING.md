@@ -11,7 +11,7 @@ One command — same script CI runs, no container invocation to memorize:
 ./kmod/build.py --all                   # every supported GKI
 ```
 
-The script auto-detects whether to build natively (you're already inside the DDK image, or you've pointed `--kdir` at a kernel source tree) or to spawn a `ghcr.io/ylarod/ddk-min:<kmi>-<TAG>` container via podman/docker. On rootless podman (Fedora etc) it adds `--userns=keep-id` and `:Z` automatically. The output is `vpnhide-kmod-<kmi>.zip` at the repo root.
+The script auto-detects whether to build natively (you're already inside the DDK image, or you've pointed `--kdir` at a kernel source tree) or to spawn a `ghcr.io/ylarod/ddk-min:<kmi>-<TAG>` container via podman/docker. On rootless podman (Fedora etc) it adds `--userns=keep-id` and `:Z` automatically. The output is `vpnhide-kmod-<kmi>.zip` plus `vpnhide-bridge.zip` at the repo root. To package only the bridge, run `./kmod/build.py --bridge-only`.
 
 Requires `podman` or `docker`. The container image weighs ~1 GB per GKI variant on first pull.
 
@@ -72,4 +72,4 @@ adb shell "su -c 'cat /proc/vpnhide_targets'"
 
 **`./kmod/build.py` says "neither podman nor docker found"** — install one (`dnf install podman` / `apt install docker.io`), or build natively against a local kernel source via `--kdir`.
 
-**Bumping the DDK image tag** — single source of truth is `DDK_IMAGE_TAG` in `kmod/build.py`. Both this script and `.github/workflows/ci.yml`'s kmod matrix pin to the same value, so update both together.
+**Bumping the DDK image tag** — single source of truth is `DDK_IMAGE_TAG` in `kmod/build.py`. Both this script and `.github/workflows/build.yml`'s kmod matrix pin to the same value, so update both together.
