@@ -30,7 +30,7 @@ live in focused modules. The module build still packages it as
 
 Supported variants are: `android12-5.10`, `android13-5.10`, `android13-5.15`, `android14-5.15`, `android14-6.1`, `android15-6.6`, `android16-6.12`, and `android17-6.18`.
 
-The in-tree kpatch compatibility profiles additionally cover upstream 4.9.337, 4.14.336, 4.19.325, and Android common 5.4 (`upstream-4.9`, `upstream-4.14`, `upstream-4.19`, `android12-5.4`). Local QEMU matrices always run one build/container at a time. Test containers default to 32 compiler jobs with an 11 GiB hard memory limit; override these with `VPNHIDE_BUILD_JOBS` and `VPNHIDE_BUILD_MEMORY` for smaller hosts.
+The in-tree kpatch compatibility profiles additionally cover android lineage 4.9.337, 4.14.336, 4.19.325, and Android common 5.4 (`android-4.9`, `android-4.14`, `android-4.19`, `android12-5.4`). Local QEMU matrices always run one build/container at a time. Test containers default to 32 compiler jobs with an 11 GiB hard memory limit; override these with `VPNHIDE_BUILD_JOBS` and `VPNHIDE_BUILD_MEMORY` for smaller hosts.
 
 If the kernel sources and LLVM are already available locally, the container can be skipped:
 
