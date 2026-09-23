@@ -9,9 +9,6 @@ permissions:
   contents: read
   packages: read
 
-env:
-  KMI: android15-6.6
-
 jobs:
   build-userspace:
     name: Build Android host binaries
@@ -53,11 +50,11 @@ jobs:
           retention-days: 14
 
   build-kmod:
-    name: Build kmod (${{ env.KMI }})
+    name: Build kmod (android15-6.6)
     needs: build-userspace
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/ylarod/ddk-min:${{ env.KMI }}
+      image: ghcr.io/ylarod/ddk-min:android15-6.6
     steps:
       - uses: actions/checkout@v6
         with:
@@ -79,12 +76,12 @@ jobs:
           python3 kmod/build.py \
             --inside-container \
             --skip-userspace-build \
-            --kmi "$KMI"
+            --kmi android15-6.6
 
       - name: Upload debug kmod package
         uses: actions/upload-artifact@v4
         with:
-          name: vpnhide-kmod-debug-${{ env.KMI }}
-          path: vpnhide-kmod-${{ env.KMI }}.zip
+          name: vpnhide-kmod-debug-android15-6.6
+          path: vpnhide-kmod-android15-6.6.zip
           if-no-files-found: error
           retention-days: 14
