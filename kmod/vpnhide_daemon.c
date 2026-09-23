@@ -151,32 +151,60 @@ static int nomount_run_rule(const char *action, const char *path)
 	pid_t pid;
 	unsigned long long deadline;
 
+	fprintf(stderr, "vpnhide-daemon: NOMOUNT START action=%s path=%s tool=%s\\n",
+		action, path, tool ? tool : "(missing)");
+
 	if (!tool) {
 		susfs_log_error("NoMount binary not found at /data/adb/modules/nomount/bin/nm");
+		fprintf(stderr, "vpnhide-daemon: NOMOUNT NO_TOOL action=%s path=%s\\n",
+			action, path);
 		return -ENOENT;
 	}
+
 	pid = fork();
-	if (pid < 0)
+	if (pid < 0) {
+		fprintf(stderr, "vpnhide-daemon: NOMOUNT FORK_FAILED action=%s path=%s errno=%d (%s)\\n",
+			action, path, errno, strerror(errno));
 		return -errno;
+	}
+
 	if (pid == 0) {
+		fprintf(stderr, "vpnhide-daemon: NOMOUNT CHILD_EXEC action=%s path=%s\\n",
+			action, path);
 		if (!strcmp(action, "add"))
 			execl(tool, tool, "rule", "add", "--whiteout", path, (char *)NULL);
 		else
 			execl(tool, tool, "rule", "del", path, (char *)NULL);
+		fprintf(stderr, "vpnhide-daemon: NOMOUNT EXEC_FAILED action=%s path=%s errno=%d (%s)\\n",
+			action, path, errno, strerror(errno));
 		_exit(127);
 	}
+
+	fprintf(stderr, "vpnhide-daemon: NOMOUNT FORK action=%s path=%s pid=%d\\n",
+		action, path, (int)pid);
 
 	deadline = get_time_ms() + 2000;
 	for (;;) {
 		pid_t waited = waitpid(pid, &status, WNOHANG);
-		if (waited == pid)
+		if (waited == pid) {
+			fprintf(stderr, "vpnhide-daemon: NOMOUNT DONE action=%s path=%s pid=%d status=%d exited=%d code=%d signaled=%d signal=%d\\n",
+				action, path, (int)pid, status,
+				WIFEXITED(status) ? 1 : 0,
+				WIFEXITED(status) ? WEXITSTATUS(status) : -1,
+				WIFSIGNALED(status) ? 1 : 0,
+				WIFSIGNALED(status) ? WTERMSIG(status) : -1);
 			break;
+		}
 		if (waited < 0) {
 			if (errno == EINTR)
 				continue;
+			fprintf(stderr, "vpnhide-daemon: NOMOUNT WAITPID_FAILED action=%s path=%s pid=%d errno=%d (%s)\\n",
+				action, path, (int)pid, errno, strerror(errno));
 			return -errno;
 		}
 		if (get_time_ms() >= deadline) {
+			fprintf(stderr, "vpnhide-daemon: NOMOUNT TIMEOUT action=%s path=%s pid=%d\\n",
+				action, path, (int)pid);
 			kill(pid, SIGKILL);
 			waitpid(pid, &status, 0);
 			return -ETIMEDOUT;
