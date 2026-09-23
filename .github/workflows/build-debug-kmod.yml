@@ -1,0 +1,87 @@
+name: Build NoMount Debug Kmod
+
+on:
+  push:
+    branches: [debug/nomount-2.5.5]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build-userspace:
+    name: Build Android host binaries
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/soranerai/vpnhide_next/ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Build vpnhide-ctl and vpnhide-daemon
+        run: |
+          set -euo pipefail
+          NDK_CLANG="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang"
+          NDK_STRIP="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+
+          "$NDK_CLANG" -O2 -Wall -static \
+            kmod/vpnhide_ctl.c kmod/vpnhide_policy.c kmod/parson.c \
+            -o kmod/vpnhide-ctl-host
+
+          "$NDK_CLANG" -O2 -Wall -static \
+            kmod/vpnhide_daemon.c \
+            -o kmod/vpnhide-daemon-host
+
+          "$NDK_STRIP" kmod/vpnhide-ctl-host kmod/vpnhide-daemon-host
+
+      - name: Upload host binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpnhide-debug-host-binaries
+          path: |
+            kmod/vpnhide-ctl-host
+            kmod/vpnhide-daemon-host
+          if-no-files-found: error
+          retention-days: 14
+
+  build-kmod:
+    name: Build kmod (android15-6.6)
+    needs: build-userspace
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:android15-6.6
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Download host binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: vpnhide-debug-host-binaries
+          path: kmod
+
+      - name: Build debug kmod package
+        run: |
+          set -euo pipefail
+          chmod +x kmod/vpnhide-ctl-host kmod/vpnhide-daemon-host
+          python3 kmod/build.py \
+            --inside-container \
+            --skip-userspace-build \
+            --kmi android15-6.6
+
+      - name: Upload debug kmod package
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpnhide-kmod-debug-android15-6.6
+          path: vpnhide-kmod-android15-6.6.zip
+          if-no-files-found: error
+          retention-days: 14
