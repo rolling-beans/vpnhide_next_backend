@@ -25,7 +25,7 @@ jobs:
 
       - name: Build vpnhide-ctl and vpnhide-daemon
         run: |
-          set -euo pipefail
+          set -eu
           NDK_CLANG="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang"
           NDK_STRIP="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
 
@@ -71,7 +71,7 @@ jobs:
 
       - name: Build debug kmod package
         run: |
-          set -euo pipefail
+          set -eu
           chmod +x kmod/vpnhide-ctl-host kmod/vpnhide-daemon-host
           python3 kmod/build.py \
             --inside-container \
